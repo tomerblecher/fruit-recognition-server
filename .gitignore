@@ -126,3 +126,4 @@ dmypy.json
 
 .idea/
 data/tokens.json
+data/export.pkl

@@ -79,7 +79,7 @@ async def upload(request):
     if 'extended' in data and data['extended'].lower() == "true":
         print("Need extra data")
         for item in response:
-            item['extra'] = [d for d in nutrition if d['id'] == item['label']['nutrition_id']]
+            item['extra'] = [d for d in nutrition if d['info']['id'] == item['label']['nutrition_id']][0]
     res = {
         "timestamp": int(time.time()),
         "results": response

@@ -247,5 +247,10 @@
     "id": 49,
     "name": "garlic",
     "nutrition_id": 11215
+  },
+  {
+    "id": 50,
+    "name": "carrot",
+    "nutrition_id": 11215
   }
 ]

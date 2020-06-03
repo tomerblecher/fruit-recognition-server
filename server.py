@@ -1,4 +1,3 @@
-import re
 
 from starlette.applications import Starlette
 from starlette.staticfiles import StaticFiles
@@ -17,7 +16,8 @@ app = Starlette(debug=True)
 PATH = {
     'tokens': 'data/tokens.json',
     'labels': 'data/lable_json.json',
-    'nutrition_db': 'data/nutrition_db.json'
+    'nutrition_db': 'data/nutrition_db.json',
+    'client_config': 'data/client_config.json'
 }
 
 # Path for the images.
@@ -53,6 +53,36 @@ def load_json(path):
 
 
 learn = Learner('data', load_json(PATH['labels']))
+
+
+@app.route("/status/token")
+async def check_token(request):
+    """
+    Validates the client token.
+    :param request:
+    :param Request request : Request Incoming request from client.
+    :return Response|JSONResponse: In case of an error in validation, an error response will be returned.
+                                   In case of a success,
+                                   200 status response will be sent.
+    """
+    if not is_token_valid(request):
+        return Response(status_code=404)
+    return Response(status_code=200)
+
+
+@app.route("/client/config")
+async def fetch_client_config(request):
+    """
+    Fetch updated client configuration.
+    :param request:
+    :param Request request : Request Incoming request from client.
+    :return Response|JSONResponse: In case of an error in validation, an error response will be returned.
+                                   In case of a success,
+                                   200 status response will be sent.
+    """
+    if not is_token_valid(request):
+        return Response(status_code=404)
+    return JSONResponse(load_json(PATH['client_config']))
 
 
 @app.route("/classify", methods=["POST"])
@@ -104,6 +134,54 @@ async def fetch_all_labels(request):
     return JSONResponse(load_json(PATH['labels']))
 
 
+@app.route('/nutrition/{class_id:int}')
+async def fetch_all_labels(request):
+    """
+        Fetch nutrition data for given class id.
+
+        :param Request request : Request Incoming request from client.
+
+        :return Response|JSONResponse: In case of an error in validation, an error response will be returned.
+                                       In case of a success, a json response will be returned with the labels list.
+    """
+
+    if not is_token_valid(request):
+        return Response(status_code=404)
+    label = learn.fetch_label(request.path_params['class_id'])
+    if label is None:
+        return Response(status_code=404)
+    item = {}
+    item['label'] = label
+    item['extra'] = [d for d in nutrition if d['info']['id'] == label['nutrition_id']][0]
+    return JSONResponse(item)
+
+
+@app.route('/label/fetch', methods=["POST"])
+async def fetch_label(request):
+    """
+        Fetch Label information for array of ids.
+
+        :param Request request : Request Incoming request from client.
+
+        :return Response|JSONResponse: In case of an error in validation, an error response will be returned.
+                                       In case of a success, a json response will be returned with the labels list.
+    """
+
+    if not is_token_valid(request):
+        return Response(status_code=404)
+
+    data = await request.form()
+    id_list = data.getlist('id_list[]')
+    final_items = []
+
+    for id in id_list:
+        label = learn.fetch_label(int(id))
+        if label is not None:
+            item = {'label': label, 'extra': [d for d in nutrition if d['info']['id'] == label['nutrition_id']][0]}
+            final_items.append(item)
+    return JSONResponse(final_items)
+
+
 @app.route('/')
 async def default_route(request):
     """
@@ -150,9 +228,6 @@ if __name__ == "__main__":
     print(tokens)
     if len(sys.argv) > 1:
         if sys.argv[1] == "live":
-            # uvicorn.run(app, host="0.0.0.0", port=8000,
-            #             ssl_keyfile="/home/anaconda/.local/share/mkcert/xxx-key.pem",
-            #             ssl_certfile="/home/anaconda/.local/share/mkcert/xxx.pem")
             uvicorn.run(app, host="0.0.0.0", port=8000)
     else:
         uvicorn.run(app, port=8000, ssl_keyfile="/home/anaconda/.local/share/mkcert/localhost-key.pem",

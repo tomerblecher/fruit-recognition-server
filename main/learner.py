@@ -1,10 +1,4 @@
-import os, glob
 from fastai.vision import *
-from fastai import *
-from fastai.utils.show_install import *
-from fastai.widgets import *
-
-import time
 
 
 class Learner:
@@ -22,7 +16,7 @@ class Learner:
         :return: dictionary[] containing precision percent & label data ordered by accurate(First = highest)
         """
         img = open_image(BytesIO(img_bytes))
-        _, _, preds = self.learner.predict(img)
+        aa, bb, preds = self.learner.predict(img)
         # Get all best predictions
         preds_sorted, idxs = preds.sort(descending=True)
         res = []

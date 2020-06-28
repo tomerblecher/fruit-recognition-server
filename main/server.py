@@ -1,58 +1,29 @@
 
-from starlette.applications import Starlette
-from starlette.staticfiles import StaticFiles
-from starlette.responses import JSONResponse
-from learner import Learner
-from io import BytesIO
-import uvicorn
-from utils_func import *
 import sys
-import json
-from starlette.responses import Response
 import time
+from io import BytesIO
+import re
+
+from main.config import Config
+import uvicorn
 from PIL import Image
+from starlette.applications import Starlette
+from starlette.responses import JSONResponse
+from starlette.responses import Response
+from main.utils.utils_func import *
 
+config = Config()
 app = Starlette(debug=True)
-PATH = {
-    'tokens': 'data/tokens.json',
-    'labels': 'data/lable_json.json',
-    'nutrition_db': 'data/nutrition_db.json',
-    'client_config': 'data/client_config.json'
-}
-
-# Path for the images.
-img_folder = "data/imgs"
-
-tokens = []
-nutrition = []
 
 
 def is_token_valid(request):
     """
         Validates the existence of a token from the client request with saved tokens list.
-
         :param Request request : Request Incoming request from client.
         :return bool: Token existence will return true, false otherwise
     """
 
-    return 'token' in request.headers and request.headers['token'] in tokens
-
-
-def load_json(path):
-    """
-        Loads a Json file and returns the deserialized object of that json.
-
-        :param string path: requested file path
-        :return dictionary json:  Deserialized representation of the json file
-    """
-
-    f = open(path, 'r')
-    json_file = json.load(f)
-    f.close()
-    return json_file
-
-
-learn = Learner('data', load_json(PATH['labels']))
+    return 'token' in request.headers and request.headers['token'] in config.tokens
 
 
 @app.route("/status/token")
@@ -82,11 +53,11 @@ async def fetch_client_config(request):
     """
     if not is_token_valid(request):
         return Response(status_code=404)
-    return JSONResponse(load_json(PATH['client_config']))
+    return JSONResponse(load_json(config.path['client_config']))
 
 
 @app.route("/classify", methods=["POST"])
-async def upload(request):
+async def classify(request):
     """
         Predicts the classes for a given image.
         The function will emit the predict method on the learner object and return the result.
@@ -105,11 +76,11 @@ async def upload(request):
     print(data['file'].filename)
     imgBytes = await (data['file'].read())
     print("Image size: {}".format(len(imgBytes)))
-    response = learn.predict(imgBytes, 2)
+    response = config.learn.predict(imgBytes, 2)
     if 'extended' in data and data['extended'].lower() == "true":
         print("Need extra data")
         for item in response:
-            item['extra'] = [d for d in nutrition if d['info']['id'] == item['label']['nutrition_id']][0]
+            item['extra'] = [d for d in config.nutrition if d['info']['id'] == item['label']['nutrition_id']][0]
     res = {
         "timestamp": int(time.time()),
         "results": response
@@ -131,11 +102,11 @@ async def fetch_all_labels(request):
 
     if not is_token_valid(request):
         return Response(status_code=404)
-    return JSONResponse(load_json(PATH['labels']))
+    return JSONResponse(load_json(config.path['labels']))
 
 
 @app.route('/nutrition/{class_id:int}')
-async def fetch_all_labels(request):
+async def fetch_nutrition(request):
     """
         Fetch nutrition data for given class id.
 
@@ -147,12 +118,12 @@ async def fetch_all_labels(request):
 
     if not is_token_valid(request):
         return Response(status_code=404)
-    label = learn.fetch_label(request.path_params['class_id'])
+    label = config.learn.fetch_label(request.path_params['class_id'])
     if label is None:
         return Response(status_code=404)
     item = {}
     item['label'] = label
-    item['extra'] = [d for d in nutrition if d['info']['id'] == label['nutrition_id']][0]
+    item['extra'] = [d for d in config.nutrition if d['info']['id'] == label['nutrition_id']][0]
     return JSONResponse(item)
 
 
@@ -175,9 +146,9 @@ async def fetch_label(request):
     final_items = []
 
     for id in id_list:
-        label = learn.fetch_label(int(id))
+        label = config.learn.fetch_label(int(id))
         if label is not None:
-            item = {'label': label, 'extra': [d for d in nutrition if d['info']['id'] == label['nutrition_id']][0]}
+            item = {'label': label, 'extra': [d for d in config.nutrition if d['info']['id'] == label['nutrition_id']][0]}
             final_items.append(item)
     return JSONResponse(final_items)
 
@@ -210,7 +181,7 @@ async def save_img(request):
         if re.search(r'[^A-Za-z0-9_\.]{1,50}', file_name) or re.search(r'[^0-9]', label):
             return Response(status_code=502)
         try:
-            folder_path = os.path.join(img_folder, label)  # Generate folder in case it does not exist.
+            folder_path = os.path.join(config.path['img_folder'], label)  # Generate folder in case it does not exist.
             validate_folder_existence(folder_path)
             img = Image.open(BytesIO(bytes))
             img.save(os.path.join(folder_path, file_name))
@@ -223,12 +194,4 @@ async def save_img(request):
 
 
 if __name__ == "__main__":
-    tokens = load_json(PATH['tokens'])
-    nutrition = load_json(PATH['nutrition_db'])
-    print(tokens)
-    if len(sys.argv) > 1:
-        if sys.argv[1] == "live":
-            uvicorn.run(app, host="0.0.0.0", port=8000)
-    else:
-        uvicorn.run(app, port=8000, ssl_keyfile="/home/anaconda/.local/share/mkcert/localhost-key.pem",
-                    ssl_certfile="/home/anaconda/.local/share/mkcert/localhost.pem")
+    uvicorn.run(app, host="0.0.0.0", port=8000)
